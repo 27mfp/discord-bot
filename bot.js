@@ -57,7 +57,7 @@ async function handleLeaderboard(interaction) {
       return response;
     };
 
-    const updateMessage = async (page) => {
+    const createMessage = async (page) => {
       const players = await fetchPlayersForPage(page);
       const content = generateLeaderboardEmbed(players, page);
 
@@ -77,13 +77,12 @@ async function handleLeaderboard(interaction) {
       return { content, components: [row] };
     };
 
-    const message = await interaction.reply({
-      ...(await updateMessage(currentPage)),
-      fetchReply: true,
-    });
+    await interaction.reply(await createMessage(currentPage));
+
+    const message = await interaction.fetchReply();
 
     const collector = message.createMessageComponentCollector({
-      time: 60000,
+      time: 300000, // 5 minutes
     });
 
     collector.on("collect", async (i) => {
@@ -93,7 +92,7 @@ async function handleLeaderboard(interaction) {
         currentPage = Math.min(totalPages - 1, currentPage + 1);
       }
 
-      await i.update(await updateMessage(currentPage));
+      await i.update(await createMessage(currentPage));
     });
 
     collector.on("end", () => {
@@ -110,7 +109,11 @@ async function handleLeaderboard(interaction) {
           .setDisabled(true)
       );
 
-      interaction.editReply({ components: [disabledRow] }).catch(console.error);
+      interaction.editReply({ components: [disabledRow] }).catch(() => {
+        console.log(
+          "Failed to edit reply after collector end. Message may have been deleted."
+        );
+      });
     });
   } catch (error) {
     console.error(error);
@@ -175,7 +178,7 @@ async function handleMatches(interaction) {
       return response;
     };
 
-    const updateMessage = async (page) => {
+    const createMessage = async (page) => {
       const matches = await fetchMatchesForPage(page);
       const content = generateMatchesEmbed(matches, page);
 
@@ -195,13 +198,12 @@ async function handleMatches(interaction) {
       return { content, components: [row] };
     };
 
-    const message = await interaction.reply({
-      ...(await updateMessage(currentPage)),
-      fetchReply: true,
-    });
+    await interaction.reply(await createMessage(currentPage));
+
+    const message = await interaction.fetchReply();
 
     const collector = message.createMessageComponentCollector({
-      time: 60000,
+      time: 300000, // 5 minutes
     });
 
     collector.on("collect", async (i) => {
@@ -211,7 +213,7 @@ async function handleMatches(interaction) {
         currentPage = Math.min(totalPages - 1, currentPage + 1);
       }
 
-      await i.update(await updateMessage(currentPage));
+      await i.update(await createMessage(currentPage));
     });
 
     collector.on("end", () => {
@@ -228,7 +230,11 @@ async function handleMatches(interaction) {
           .setDisabled(true)
       );
 
-      interaction.editReply({ components: [disabledRow] }).catch(console.error);
+      interaction.editReply({ components: [disabledRow] }).catch(() => {
+        console.log(
+          "Failed to edit reply after collector end. Message may have been deleted."
+        );
+      });
     });
   } catch (error) {
     console.error(error);
