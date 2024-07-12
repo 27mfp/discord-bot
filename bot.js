@@ -57,7 +57,7 @@ async function handleLeaderboard(interaction) {
       return response;
     };
 
-    const updateMessage = async (interaction, page) => {
+    const updateMessage = async (page) => {
       const players = await fetchPlayersForPage(page);
       const content = generateLeaderboardEmbed(players, page);
 
@@ -78,7 +78,7 @@ async function handleLeaderboard(interaction) {
     };
 
     const message = await interaction.reply({
-      ...(await updateMessage(interaction, currentPage)),
+      ...(await updateMessage(currentPage)),
       fetchReply: true,
     });
 
@@ -93,7 +93,7 @@ async function handleLeaderboard(interaction) {
         currentPage = Math.min(totalPages - 1, currentPage + 1);
       }
 
-      await i.update(await updateMessage(interaction, currentPage));
+      await i.update(await updateMessage(currentPage));
     });
 
     collector.on("end", () => {
@@ -110,13 +110,16 @@ async function handleLeaderboard(interaction) {
           .setDisabled(true)
       );
 
-      interaction.editReply({ components: [disabledRow] });
+      interaction.editReply({ components: [disabledRow] }).catch(console.error);
     });
   } catch (error) {
     console.error(error);
-    await interaction.reply(
-      "An error occurred while fetching the leaderboard."
-    );
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "An error occurred while fetching the leaderboard.",
+        ephemeral: true,
+      });
+    }
   }
 }
 
@@ -172,7 +175,7 @@ async function handleMatches(interaction) {
       return response;
     };
 
-    const updateMessage = async (interaction, page) => {
+    const updateMessage = async (page) => {
       const matches = await fetchMatchesForPage(page);
       const content = generateMatchesEmbed(matches, page);
 
@@ -193,7 +196,7 @@ async function handleMatches(interaction) {
     };
 
     const message = await interaction.reply({
-      ...(await updateMessage(interaction, currentPage)),
+      ...(await updateMessage(currentPage)),
       fetchReply: true,
     });
 
@@ -208,7 +211,7 @@ async function handleMatches(interaction) {
         currentPage = Math.min(totalPages - 1, currentPage + 1);
       }
 
-      await i.update(await updateMessage(interaction, currentPage));
+      await i.update(await updateMessage(currentPage));
     });
 
     collector.on("end", () => {
@@ -225,11 +228,16 @@ async function handleMatches(interaction) {
           .setDisabled(true)
       );
 
-      interaction.editReply({ components: [disabledRow] });
+      interaction.editReply({ components: [disabledRow] }).catch(console.error);
     });
   } catch (error) {
     console.error(error);
-    await interaction.reply("An error occurred while fetching the matches.");
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "An error occurred while fetching the matches.",
+        ephemeral: true,
+      });
+    }
   }
 }
 
