@@ -1,0 +1,17 @@
+{
+  "name": "football-discord-bot",
+  "version": "1.0.0",
+  "description": "A Discord bot for managing football matches and leaderboards",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.16.2",
+    "discord.js": "^14.11.0",
+    "dotenv": "^16.0.3"
+  },
+  "devDependencies": {
+    "prisma": "^5.16.2"
+  }
+}
