@@ -7,6 +7,7 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require("discord.js");
+
 const { PrismaClient } = require("@prisma/client");
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
