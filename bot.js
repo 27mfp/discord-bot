@@ -1,5 +1,4 @@
 require("dotenv").config();
-
 const {
   Client,
   GatewayIntentBits,
@@ -7,14 +6,15 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require("discord.js");
-
 const { PrismaClient } = require("@prisma/client");
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const prisma = new PrismaClient();
 
+console.log("Bot is starting up...");
+
 client.once("ready", () => {
-  console.log(`Logged in as ${client.user.tag}!`);
+  console.log(`Bot is ready! Logged in as ${client.user.tag}`);
   registerCommands();
 });
 
@@ -22,25 +22,34 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
 
   const { commandName } = interaction;
+  console.log(`Command received: ${commandName}`);
 
   if (commandName === "leaderboard") {
+    console.log("Executing leaderboard command");
     await handleLeaderboard(interaction);
   } else if (commandName === "matches") {
+    console.log("Executing matches command");
     await handleMatches(interaction);
   }
 });
 
 async function handleLeaderboard(interaction) {
+  console.log("Starting leaderboard command");
   try {
     await interaction.deferReply();
+    console.log("Interaction deferred");
 
     const pageSize = 10;
     let currentPage = 0;
 
+    console.log("Fetching total player count");
     const totalPlayers = await prisma.player.count();
     const totalPages = Math.ceil(totalPlayers / pageSize);
 
+    console.log(`Total players: ${totalPlayers}, Total pages: ${totalPages}`);
+
     const fetchPlayersForPage = async (page) => {
+      console.log(`Fetching players for page ${page}`);
       return prisma.player.findMany({
         skip: page * pageSize,
         take: pageSize,
@@ -51,6 +60,7 @@ async function handleLeaderboard(interaction) {
     };
 
     const generateLeaderboardEmbed = (players, page) => {
+      console.log(`Generating leaderboard embed for page ${page}`);
       let response = `Leaderboard (Page ${page + 1}/${totalPages}):\n\n`;
       players.forEach((player, index) => {
         const globalRank = page * pageSize + index + 1;
@@ -62,6 +72,7 @@ async function handleLeaderboard(interaction) {
     };
 
     const createMessage = async (page) => {
+      console.log(`Creating message for page ${page}`);
       const players = await fetchPlayersForPage(page);
       const content = generateLeaderboardEmbed(players, page);
 
@@ -81,15 +92,18 @@ async function handleLeaderboard(interaction) {
       return { content, components: [row] };
     };
 
+    console.log("Sending initial leaderboard message");
     await interaction.editReply(await createMessage(currentPage));
 
     const message = await interaction.fetchReply();
+    console.log("Leaderboard message sent, setting up collector");
 
     const collector = message.createMessageComponentCollector({
       time: 300000, // 5 minutes
     });
 
     collector.on("collect", async (i) => {
+      console.log(`Button clicked: ${i.customId}`);
       await i.deferUpdate();
       if (i.customId === "previous") {
         currentPage = Math.max(0, currentPage - 1);
@@ -97,10 +111,12 @@ async function handleLeaderboard(interaction) {
         currentPage = Math.min(totalPages - 1, currentPage + 1);
       }
 
+      console.log(`Updating leaderboard to page ${currentPage}`);
       await i.editReply(await createMessage(currentPage));
     });
 
     collector.on("end", () => {
+      console.log("Leaderboard collector ended");
       const disabledRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("previous")
@@ -120,8 +136,10 @@ async function handleLeaderboard(interaction) {
         );
       });
     });
+
+    console.log("Leaderboard command completed successfully");
   } catch (error) {
-    console.error(error);
+    console.error("Error in leaderboard command:", error);
     await interaction
       .editReply({
         content: "An error occurred while fetching the leaderboard.",
@@ -132,16 +150,22 @@ async function handleLeaderboard(interaction) {
 }
 
 async function handleMatches(interaction) {
+  console.log("Starting matches command");
   try {
     await interaction.deferReply();
+    console.log("Interaction deferred");
 
     const pageSize = 5;
     let currentPage = 0;
 
+    console.log("Fetching total match count");
     const totalMatches = await prisma.match.count();
     const totalPages = Math.ceil(totalMatches / pageSize);
 
+    console.log(`Total matches: ${totalMatches}, Total pages: ${totalPages}`);
+
     const fetchMatchesForPage = async (page) => {
+      console.log(`Fetching matches for page ${page}`);
       return prisma.match.findMany({
         skip: page * pageSize,
         take: pageSize,
@@ -159,6 +183,7 @@ async function handleMatches(interaction) {
     };
 
     const generateMatchesEmbed = (matches, page) => {
+      console.log(`Generating matches embed for page ${page}`);
       let response = `Matches (Page ${page + 1}/${totalPages}):\n\n`;
       matches.forEach((match, index) => {
         response += `${index + 1}. Date: ${match.date.toDateString()}, Time: ${
@@ -186,6 +211,7 @@ async function handleMatches(interaction) {
     };
 
     const createMessage = async (page) => {
+      console.log(`Creating message for page ${page}`);
       const matches = await fetchMatchesForPage(page);
       const content = generateMatchesEmbed(matches, page);
 
@@ -205,15 +231,18 @@ async function handleMatches(interaction) {
       return { content, components: [row] };
     };
 
+    console.log("Sending initial matches message");
     await interaction.editReply(await createMessage(currentPage));
 
     const message = await interaction.fetchReply();
+    console.log("Matches message sent, setting up collector");
 
     const collector = message.createMessageComponentCollector({
       time: 300000, // 5 minutes
     });
 
     collector.on("collect", async (i) => {
+      console.log(`Button clicked: ${i.customId}`);
       await i.deferUpdate();
       if (i.customId === "previous") {
         currentPage = Math.max(0, currentPage - 1);
@@ -221,10 +250,12 @@ async function handleMatches(interaction) {
         currentPage = Math.min(totalPages - 1, currentPage + 1);
       }
 
+      console.log(`Updating matches to page ${currentPage}`);
       await i.editReply(await createMessage(currentPage));
     });
 
     collector.on("end", () => {
+      console.log("Matches collector ended");
       const disabledRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("previous")
@@ -244,8 +275,10 @@ async function handleMatches(interaction) {
         );
       });
     });
+
+    console.log("Matches command completed successfully");
   } catch (error) {
-    console.error(error);
+    console.error("Error in matches command:", error);
     await interaction
       .editReply({
         content: "An error occurred while fetching the matches.",
@@ -256,6 +289,7 @@ async function handleMatches(interaction) {
 }
 
 async function registerCommands() {
+  console.log("Registering slash commands");
   const commands = [
     {
       name: "leaderboard",
@@ -272,7 +306,7 @@ async function registerCommands() {
     await client.application.commands.set(commands);
     console.log("Successfully reloaded application (/) commands.");
   } catch (error) {
-    console.error(error);
+    console.error("Error registering commands:", error);
   }
 }
 
