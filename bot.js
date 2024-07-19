@@ -30,6 +30,8 @@ client.on("interactionCreate", async (interaction) => {
 
 async function handleLeaderboard(interaction) {
   try {
+    await interaction.deferReply();
+
     const pageSize = 10;
     let currentPage = 0;
 
@@ -77,7 +79,7 @@ async function handleLeaderboard(interaction) {
       return { content, components: [row] };
     };
 
-    await interaction.reply(await createMessage(currentPage));
+    await interaction.editReply(await createMessage(currentPage));
 
     const message = await interaction.fetchReply();
 
@@ -86,13 +88,14 @@ async function handleLeaderboard(interaction) {
     });
 
     collector.on("collect", async (i) => {
+      await i.deferUpdate();
       if (i.customId === "previous") {
         currentPage = Math.max(0, currentPage - 1);
       } else if (i.customId === "next") {
         currentPage = Math.min(totalPages - 1, currentPage + 1);
       }
 
-      await i.update(await createMessage(currentPage));
+      await i.editReply(await createMessage(currentPage));
     });
 
     collector.on("end", () => {
@@ -117,17 +120,19 @@ async function handleLeaderboard(interaction) {
     });
   } catch (error) {
     console.error(error);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
+    await interaction
+      .editReply({
         content: "An error occurred while fetching the leaderboard.",
-        ephemeral: true,
-      });
-    }
+        components: [],
+      })
+      .catch(console.error);
   }
 }
 
 async function handleMatches(interaction) {
   try {
+    await interaction.deferReply();
+
     const pageSize = 5;
     let currentPage = 0;
 
@@ -198,7 +203,7 @@ async function handleMatches(interaction) {
       return { content, components: [row] };
     };
 
-    await interaction.reply(await createMessage(currentPage));
+    await interaction.editReply(await createMessage(currentPage));
 
     const message = await interaction.fetchReply();
 
@@ -207,13 +212,14 @@ async function handleMatches(interaction) {
     });
 
     collector.on("collect", async (i) => {
+      await i.deferUpdate();
       if (i.customId === "previous") {
         currentPage = Math.max(0, currentPage - 1);
       } else if (i.customId === "next") {
         currentPage = Math.min(totalPages - 1, currentPage + 1);
       }
 
-      await i.update(await createMessage(currentPage));
+      await i.editReply(await createMessage(currentPage));
     });
 
     collector.on("end", () => {
@@ -238,12 +244,12 @@ async function handleMatches(interaction) {
     });
   } catch (error) {
     console.error(error);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
+    await interaction
+      .editReply({
         content: "An error occurred while fetching the matches.",
-        ephemeral: true,
-      });
-    }
+        components: [],
+      })
+      .catch(console.error);
   }
 }
 
