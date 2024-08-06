@@ -563,7 +563,8 @@ async function handleDebtList(interaction) {
     const createEmbed = (players, pageNumber, totalPages) => {
       const embed = new EmbedBuilder()
         .setColor("#FF4500")
-        .setTitle(`Payments (Page ${pageNumber}/${totalPages})`);
+        .setTitle(`Players Owing Money (Page ${pageNumber}/${totalPages})`)
+        .setDescription("List of players with outstanding debts");
 
       const debtListText = players
         .map(
