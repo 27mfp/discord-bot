@@ -33,11 +33,17 @@ client.on("interactionCreate", async (interaction) => {
     } else if (commandName === "markpaid") {
       console.log("Executing markpaid command");
       await handleMarkPaid(interaction);
+    } else if (commandName === "playerdebt") {
+      console.log("Executing playerdebt command");
+      await handlePlayerDebt(interaction);
+    } else if (commandName === "debtlist") {
+      console.log("Executing debtlist command");
+      await handleDebtList(interaction);
     }
   } else if (interaction.isAutocomplete()) {
     const { commandName, options } = interaction;
 
-    if (commandName === "markpaid") {
+    if (commandName === "markpaid" || commandName === "playerdebt") {
       const focusedOption = options.getFocused(true);
       let choices = [];
 
@@ -62,7 +68,6 @@ client.on("interactionCreate", async (interaction) => {
         const searchTerm = focusedOption.value.toLowerCase();
         let dateFilter = {};
 
-        // Try to parse the search term as a date
         const searchDate = new Date(searchTerm);
         if (!isNaN(searchDate.getTime())) {
           const nextDay = new Date(searchDate);
@@ -103,6 +108,71 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
+async function handlePlayerDebt(interaction) {
+  console.log("Starting playerdebt command");
+  try {
+    const playerId = parseInt(interaction.options.getString("player"));
+
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+      include: {
+        playerMatches: {
+          where: { paid: false },
+          include: {
+            match: {
+              include: {
+                players: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!player) {
+      await interaction.reply("Invalid player selected.");
+      return;
+    }
+
+    if (player.playerMatches.length === 0) {
+      await interaction.reply(`${player.name} doesn't owe any money.`);
+      return;
+    }
+
+    let totalDebt = 0;
+    let matchDetails = "";
+
+    player.playerMatches.forEach((playerMatch, index) => {
+      const match = playerMatch.match;
+      const playerCount = match.players.length;
+      const debtForThisMatch = match.price / playerCount;
+      totalDebt += debtForThisMatch;
+      matchDetails += `${index + 1}. ${
+        match.date.toISOString().split("T")[0]
+      } - ${match.time} - ${match.location} (€${debtForThisMatch.toFixed(
+        2
+      )})\n`;
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor("#FF4500")
+      .setTitle(`${player.name}'s Debt`)
+      .setDescription(`Total amount owed: €${totalDebt.toFixed(2)}`)
+      .addFields(
+        { name: "Unpaid Matches", value: matchDetails },
+        { name: "Current ELO", value: player.elo.toFixed(0) },
+        { name: "Total Matches", value: player.matches.toString() },
+        { name: "Wins", value: player.wins.toString() }
+      );
+
+    await interaction.reply({ embeds: [embed] });
+  } catch (error) {
+    console.error("Error in playerdebt command:", error);
+    await interaction.reply(
+      "An error occurred while fetching player debt information."
+    );
+  }
+}
 async function handleLeaderboard(interaction) {
   console.log("Starting leaderboard command");
   try {
@@ -240,7 +310,6 @@ async function handleLeaderboard(interaction) {
       .catch(console.error);
   }
 }
-
 async function handleMatches(interaction) {
   console.log("Starting matches command");
   try {
@@ -443,6 +512,141 @@ async function handleMarkPaid(interaction) {
     );
   }
 }
+async function handleDebtList(interaction) {
+  console.log("Starting debtlist command");
+  try {
+    await interaction.deferReply();
+
+    const playersWithDebt = await prisma.player.findMany({
+      where: {
+        playerMatches: {
+          some: {
+            paid: false,
+          },
+        },
+      },
+      include: {
+        playerMatches: {
+          where: {
+            paid: false,
+          },
+          include: {
+            match: {
+              include: {
+                players: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (playersWithDebt.length === 0) {
+      await interaction.editReply("No players currently owe any money.");
+      return;
+    }
+
+    const debtList = playersWithDebt
+      .map((player) => {
+        const totalDebt = player.playerMatches.reduce((sum, pm) => {
+          const playersInMatch = pm.match.players.length;
+          return sum + pm.match.price / playersInMatch;
+        }, 0);
+        return {
+          name: player.name,
+          debt: totalDebt,
+          unpaidGames: player.playerMatches.length,
+        };
+      })
+      .sort((a, b) => b.debt - a.debt);
+
+    const createEmbed = (players, pageNumber, totalPages) => {
+      const embed = new EmbedBuilder()
+        .setColor("#FF4500")
+        .setTitle(`Payments (Page ${pageNumber}/${totalPages})`);
+
+      const debtListText = players
+        .map(
+          (player, index) =>
+            `${index + 1}. **${player.name}**\n   €${player.debt.toFixed(2)} (${
+              player.unpaidGames
+            } unpaid game${player.unpaidGames > 1 ? "s" : ""})`
+        )
+        .join("\n\n");
+
+      embed.addFields({ name: "Debt List", value: debtListText });
+
+      return embed;
+    };
+
+    const PLAYERS_PER_PAGE = 10;
+    const totalPages = Math.ceil(debtList.length / PLAYERS_PER_PAGE);
+
+    const embeds = [];
+    for (let i = 0; i < debtList.length; i += PLAYERS_PER_PAGE) {
+      const pageNumber = Math.floor(i / PLAYERS_PER_PAGE) + 1;
+      const playersOnPage = debtList.slice(i, i + PLAYERS_PER_PAGE);
+      embeds.push(createEmbed(playersOnPage, pageNumber, totalPages));
+    }
+
+    if (embeds.length === 1) {
+      await interaction.editReply({ embeds });
+    } else {
+      let currentPage = 0;
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("previous")
+          .setLabel("Previous")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId("next")
+          .setLabel("Next")
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      const updateMessage = async () => {
+        await interaction.editReply({
+          embeds: [embeds[currentPage]],
+          components: [row],
+        });
+      };
+
+      await updateMessage();
+
+      const message = await interaction.fetchReply();
+
+      const collector = message.createMessageComponentCollector({
+        filter: (i) =>
+          i.user.id === interaction.user.id &&
+          (i.customId === "previous" || i.customId === "next"),
+        time: 60000,
+      });
+
+      collector.on("collect", async (i) => {
+        if (i.customId === "previous") {
+          currentPage = (currentPage - 1 + embeds.length) % embeds.length;
+        } else if (i.customId === "next") {
+          currentPage = (currentPage + 1) % embeds.length;
+        }
+        await i.update({
+          embeds: [embeds[currentPage]],
+          components: [row],
+        });
+      });
+
+      collector.on("end", () => {
+        row.components.forEach((button) => button.setDisabled(true));
+        interaction.editReply({ components: [row] }).catch(console.error);
+      });
+    }
+  } catch (error) {
+    console.error("Error in debtlist command:", error);
+    await interaction.editReply(
+      "An error occurred while fetching the debt list."
+    );
+  }
+}
 
 async function registerCommands() {
   console.log("Registering slash commands");
@@ -474,6 +678,23 @@ async function registerCommands() {
           autocomplete: true,
         },
       ],
+    },
+    {
+      name: "playerdebt",
+      description: "Show how much a player owes",
+      options: [
+        {
+          name: "player",
+          type: 3, // STRING type
+          description: "Select the player",
+          required: true,
+          autocomplete: true,
+        },
+      ],
+    },
+    {
+      name: "debtlist",
+      description: "Show a list of players who owe money",
     },
   ];
 
