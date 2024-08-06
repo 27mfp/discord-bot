@@ -108,71 +108,6 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-async function handlePlayerDebt(interaction) {
-  console.log("Starting playerdebt command");
-  try {
-    const playerId = parseInt(interaction.options.getString("player"));
-
-    const player = await prisma.player.findUnique({
-      where: { id: playerId },
-      include: {
-        playerMatches: {
-          where: { paid: false },
-          include: {
-            match: {
-              include: {
-                players: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!player) {
-      await interaction.reply("Invalid player selected.");
-      return;
-    }
-
-    if (player.playerMatches.length === 0) {
-      await interaction.reply(`${player.name} doesn't owe any money.`);
-      return;
-    }
-
-    let totalDebt = 0;
-    let matchDetails = "";
-
-    player.playerMatches.forEach((playerMatch, index) => {
-      const match = playerMatch.match;
-      const playerCount = match.players.length;
-      const debtForThisMatch = match.price / playerCount;
-      totalDebt += debtForThisMatch;
-      matchDetails += `${index + 1}. ${
-        match.date.toISOString().split("T")[0]
-      } - ${match.time} - ${match.location} (€${debtForThisMatch.toFixed(
-        2
-      )})\n`;
-    });
-
-    const embed = new EmbedBuilder()
-      .setColor("#FF4500")
-      .setTitle(`${player.name}'s Debt`)
-      .setDescription(`Total amount owed: €${totalDebt.toFixed(2)}`)
-      .addFields(
-        { name: "Unpaid Matches", value: matchDetails },
-        { name: "Current ELO", value: player.elo.toFixed(0) },
-        { name: "Total Matches", value: player.matches.toString() },
-        { name: "Wins", value: player.wins.toString() }
-      );
-
-    await interaction.reply({ embeds: [embed] });
-  } catch (error) {
-    console.error("Error in playerdebt command:", error);
-    await interaction.reply(
-      "An error occurred while fetching player debt information."
-    );
-  }
-}
 async function handleLeaderboard(interaction) {
   console.log("Starting leaderboard command");
   try {
@@ -509,6 +444,71 @@ async function handleMarkPaid(interaction) {
     console.error("Error in markpaid command:", error);
     await interaction.reply(
       "An error occurred while marking the player as paid."
+    );
+  }
+}
+async function handlePlayerDebt(interaction) {
+  console.log("Starting playerdebt command");
+  try {
+    const playerId = parseInt(interaction.options.getString("player"));
+
+    const player = await prisma.player.findUnique({
+      where: { id: playerId },
+      include: {
+        playerMatches: {
+          where: { paid: false },
+          include: {
+            match: {
+              include: {
+                players: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!player) {
+      await interaction.reply("Invalid player selected.");
+      return;
+    }
+
+    if (player.playerMatches.length === 0) {
+      await interaction.reply(`${player.name} doesn't owe any money.`);
+      return;
+    }
+
+    let totalDebt = 0;
+    let matchDetails = "";
+
+    player.playerMatches.forEach((playerMatch, index) => {
+      const match = playerMatch.match;
+      const playerCount = match.players.length;
+      const debtForThisMatch = match.price / playerCount;
+      totalDebt += debtForThisMatch;
+      matchDetails += `${index + 1}. ${
+        match.date.toISOString().split("T")[0]
+      } - ${match.time} - ${match.location} (€${debtForThisMatch.toFixed(
+        2
+      )})\n`;
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor("#FF4500")
+      .setTitle(`${player.name}'s Debt`)
+      .setDescription(`Total amount owed: €${totalDebt.toFixed(2)}`)
+      .addFields(
+        { name: "Unpaid Matches", value: matchDetails },
+        { name: "Current ELO", value: player.elo.toFixed(0) },
+        { name: "Total Matches", value: player.matches.toString() },
+        { name: "Wins", value: player.wins.toString() }
+      );
+
+    await interaction.reply({ embeds: [embed] });
+  } catch (error) {
+    console.error("Error in playerdebt command:", error);
+    await interaction.reply(
+      "An error occurred while fetching player debt information."
     );
   }
 }
