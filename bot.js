@@ -107,8 +107,7 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       await interaction.respond(choices);
-    }
-    if (commandName === "jogo") {
+    } else if (commandName === "jogo") {
       await handleJogoAutocomplete(interaction);
     }
   }
@@ -840,4 +839,11 @@ async function registerCommands() {
   }
 }
 
+// Make sure to call registerCommands() when your bot starts up
+client.once("ready", () => {
+  console.log(`Bot is ready! Logged in as ${client.user.tag}`);
+  registerCommands();
+});
+
+// Don't forget to login your bot
 client.login(process.env.DISCORD_TOKEN);
