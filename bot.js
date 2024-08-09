@@ -39,6 +39,9 @@ client.on("interactionCreate", async (interaction) => {
     } else if (commandName === "debtlist") {
       console.log("Executing debtlist command");
       await handleDebtList(interaction);
+    } else if (commandName === "jogo") {
+      console.log("Executing jogo command");
+      await handleJogo(interaction);
     }
   } else if (interaction.isAutocomplete()) {
     const { commandName, options } = interaction;
@@ -104,6 +107,9 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       await interaction.respond(choices);
+    }
+    if (commandName === "jogo") {
+      await handleJogoAutocomplete(interaction);
     }
   }
 });
@@ -648,7 +654,120 @@ async function handleDebtList(interaction) {
     );
   }
 }
+async function handleJogo(interaction) {
+  console.log("Starting jogo command");
+  try {
+    await interaction.deferReply();
+    const matchId = parseInt(interaction.options.getString("jogo"));
 
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        players: {
+          include: {
+            player: true,
+          },
+        },
+      },
+    });
+
+    if (!match) {
+      await interaction.editReply("Jogo não encontrado.");
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor("#0099ff")
+      .setTitle(`Detalhes do Jogo`)
+      .setDescription(`Jogo em ${formatDate(match.date)}`);
+
+    const teams = match.players.reduce((acc, pm) => {
+      if (!acc[pm.team]) {
+        acc[pm.team] = [];
+      }
+      acc[pm.team].push(pm.player.name);
+      return acc;
+    }, {});
+
+    let matchDetails = `📅 ${formatDate(match.date)}\n⏰ ${match.time}\n📍 ${
+      match.location
+    }\n💰 Preço: €${match.price.toFixed(2)}\n\n`;
+    Object.entries(teams).forEach(([teamName, players]) => {
+      matchDetails += `**Equipe ${teamName}:** ${players.join(", ")}\n`;
+    });
+
+    if (match.result) {
+      matchDetails += `\n**Resultado:** ${match.result}`;
+    }
+
+    embed.addFields({ name: "Detalhes do Jogo", value: matchDetails });
+
+    await interaction.editReply({ embeds: [embed] });
+    console.log("Jogo command completed successfully");
+  } catch (error) {
+    console.error("Error in jogo command:", error);
+    await interaction.editReply(
+      "Ocorreu um erro ao buscar os detalhes do jogo."
+    );
+  }
+}
+async function handleJogoAutocomplete(interaction) {
+  const focusedValue = interaction.options.getFocused();
+
+  try {
+    const matches = await prisma.match.findMany({
+      where: {
+        OR: [
+          {
+            date: {
+              contains: focusedValue,
+            },
+          },
+          {
+            location: {
+              contains: focusedValue,
+              mode: "insensitive",
+            },
+          },
+        ],
+      },
+      orderBy: {
+        date: "desc",
+      },
+      take: 25,
+    });
+
+    const choices = matches.map((match) => ({
+      name: `${formatDate(match.date)} - ${match.time} - ${match.location}`,
+      value: match.id.toString(),
+    }));
+
+    await interaction.respond(choices);
+  } catch (error) {
+    console.error("Error in jogo autocomplete:", error);
+    await interaction.respond([]);
+  }
+}
+
+function formatDate(date) {
+  return date
+    .toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
+    .replace(/\//g, "-");
+}
+
+function formatDate(date) {
+  return date
+    .toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
+    .replace(/\//g, "-");
+}
 async function registerCommands() {
   console.log("Registering slash commands");
   const commands = [
@@ -696,6 +815,19 @@ async function registerCommands() {
     {
       name: "debtlist",
       description: "Show a list of players who owe money",
+    },
+    {
+      name: "jogo",
+      description: "Mostrar detalhes de um jogo específico",
+      options: [
+        {
+          name: "jogo",
+          type: 3, // STRING type
+          description: "Selecione o jogo",
+          required: true,
+          autocomplete: true,
+        },
+      ],
     },
   ];
 
