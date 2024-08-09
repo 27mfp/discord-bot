@@ -736,11 +736,14 @@ async function handleJogoAutocomplete(interaction) {
       take: 25,
     });
 
+    console.log("Matches found:", matches.length);
+
     const choices = matches.map((match) => ({
       name: `${formatDate(match.date)} - ${match.time} - ${match.location}`,
       value: match.id.toString(),
     }));
 
+    console.log("Sending choices:", choices);
     await interaction.respond(choices);
   } catch (error) {
     console.error("Error in jogo autocomplete:", error);
