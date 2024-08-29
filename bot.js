@@ -1,4 +1,3 @@
-require("dotenv").config();
 const {
   Client,
   GatewayIntentBits,
@@ -8,11 +7,10 @@ const {
   EmbedBuilder,
 } = require("discord.js");
 const { PrismaClient } = require("@prisma/client");
+require("dotenv").config();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const prisma = new PrismaClient();
-
-console.log("Bot is starting up...");
 
 client.once("ready", () => {
   console.log(`Bot is ready! Logged in as ${client.user.tag}`);
@@ -24,132 +22,77 @@ client.on("interactionCreate", async (interaction) => {
     const { commandName } = interaction;
     console.log(`Command received: ${commandName}`);
 
-    if (commandName === "leaderboard") {
-      console.log("Executing leaderboard command");
-      await handleLeaderboard(interaction);
-    } else if (commandName === "matches") {
-      console.log("Executing matches command");
-      await handleMatches(interaction);
-    } else if (commandName === "markpaid") {
-      console.log("Executing markpaid command");
-      await handleMarkPaid(interaction);
-    } else if (commandName === "playerdebt") {
-      console.log("Executing playerdebt command");
-      await handlePlayerDebt(interaction);
-    } else if (commandName === "debtlist") {
-      console.log("Executing debtlist command");
-      await handleDebtList(interaction);
-    } else if (commandName === "jogo") {
-      console.log("Executing jogo command");
-      await handleJogo(interaction);
+    const commandHandlers = {
+      leaderboard: handleLeaderboard,
+      matches: handleMatches,
+      markpaid: handleMarkPaid,
+      playerdebt: handlePlayerDebt,
+      debtlist: handleDebtList,
+      jogo: handleJogo,
+    };
+
+    const handler = commandHandlers[commandName];
+    if (handler) {
+      try {
+        await handler(interaction);
+      } catch (error) {
+        console.error(`Error in ${commandName} command:`, error);
+        await interaction.reply({
+          content: `An error occurred while executing the ${commandName} command.`,
+          ephemeral: true,
+        });
+      }
     }
   } else if (interaction.isAutocomplete()) {
-    const { commandName, options } = interaction;
+    const { commandName } = interaction;
 
-    if (commandName === "markpaid" || commandName === "playerdebt") {
-      const focusedOption = options.getFocused(true);
-      let choices = [];
+    const autocompleteHandlers = {
+      markpaid: handleMarkPaidAutocomplete,
+      playerdebt: handlePlayerDebtAutocomplete,
+      jogo: handleJogoAutocomplete,
+    };
 
-      if (focusedOption.name === "player") {
-        const players = await prisma.player.findMany({
-          take: 25,
-          where: {
-            name: {
-              contains: focusedOption.value,
-              mode: "insensitive",
-            },
-          },
-          orderBy: {
-            name: "asc",
-          },
-        });
-        choices = players.map((player) => ({
-          name: player.name,
-          value: player.id.toString(),
-        }));
-      } else if (focusedOption.name === "match") {
-        const searchTerm = focusedOption.value.toLowerCase();
-        let dateFilter = {};
-
-        const searchDate = new Date(searchTerm);
-        if (!isNaN(searchDate.getTime())) {
-          const nextDay = new Date(searchDate);
-          nextDay.setDate(nextDay.getDate() + 1);
-          dateFilter = {
-            gte: searchDate,
-            lt: nextDay,
-          };
-        }
-
-        const matches = await prisma.match.findMany({
-          take: 25,
-          where: {
-            OR: [
-              { date: dateFilter },
-              {
-                location: {
-                  contains: searchTerm,
-                  mode: "insensitive",
-                },
-              },
-            ],
-          },
-          orderBy: {
-            date: "desc",
-          },
-        });
-        choices = matches.map((match) => ({
-          name: `${match.date.toISOString().split("T")[0]} - ${match.time} - ${
-            match.location
-          }`,
-          value: match.id.toString(),
-        }));
+    const handler = autocompleteHandlers[commandName];
+    if (handler) {
+      try {
+        await handler(interaction);
+      } catch (error) {
+        console.error(`Error in ${commandName} autocomplete:`, error);
+        await interaction.respond([]);
       }
-
-      await interaction.respond(choices);
-    } else if (commandName === "jogo") {
-      await handleJogoAutocomplete(interaction);
     }
   }
 });
 
 async function handleLeaderboard(interaction) {
-  console.log("Starting leaderboard command");
   try {
     await interaction.deferReply();
-    console.log("Interaction deferred");
-
     const pageSize = 10;
     let currentPage = 0;
 
-    console.log("Fetching total player count");
     const totalPlayers = await prisma.player.count();
     const totalPages = Math.ceil(totalPlayers / pageSize);
 
-    console.log(`Total players: ${totalPlayers}, Total pages: ${totalPages}`);
-
     const fetchPlayersForPage = async (page) => {
-      console.log(`Fetching players for page ${page}`);
       return prisma.player.findMany({
         skip: page * pageSize,
         take: pageSize,
-        orderBy: {
-          elo: "desc",
-        },
+        orderBy: { elo: "desc" },
       });
     };
 
     const generateLeaderboardEmbed = (players, page) => {
-      console.log(`Generating leaderboard embed for page ${page}`);
       const embed = new EmbedBuilder()
-        .setColor("#0099ff")
+        .setColor("#FFD700")
         .setTitle("🏆 Leaderboard")
         .setDescription(
-          `Showing top players ${page * pageSize + 1}-${
+          `Top players ${page * pageSize + 1}-${
             page * pageSize + players.length
           } out of ${totalPlayers}`
         )
-        .setFooter({ text: `Page ${page + 1}/${totalPages}` });
+        .setThumbnail("attachment://trophy.png") // Use the attached image
+        .setFooter({ text: `Page ${page + 1}/${totalPages}` })
+        .setTimestamp();
 
       const leaderboardField = players
         .map((player, index) => {
@@ -174,7 +117,6 @@ async function handleLeaderboard(interaction) {
     };
 
     const createMessage = async (page) => {
-      console.log(`Creating message for page ${page}`);
       const players = await fetchPlayersForPage(page);
       const embed = generateLeaderboardEmbed(players, page);
 
@@ -191,21 +133,28 @@ async function handleLeaderboard(interaction) {
           .setDisabled(page === totalPages - 1)
       );
 
-      return { embeds: [embed], components: [row] };
+      // Attach the local image file
+      const attachments = [
+        { attachment: "./img/trophy.png", name: "trophy.png" },
+      ];
+
+      return { embeds: [embed], components: [row], files: attachments };
     };
 
-    console.log("Sending initial leaderboard message");
     await interaction.editReply(await createMessage(currentPage));
 
     const message = await interaction.fetchReply();
-    console.log("Leaderboard message sent, setting up collector");
-
-    const collector = message.createMessageComponentCollector({
-      time: 300000, // 5 minutes
-    });
+    const collector = message.createMessageComponentCollector({ time: 300000 });
 
     collector.on("collect", async (i) => {
-      console.log(`Button clicked: ${i.customId}`);
+      if (i.user.id !== interaction.user.id) {
+        await i.reply({
+          content: "You can't use these buttons.",
+          ephemeral: true,
+        });
+        return;
+      }
+
       await i.deferUpdate();
       if (i.customId === "previous") {
         currentPage = Math.max(0, currentPage - 1);
@@ -213,12 +162,10 @@ async function handleLeaderboard(interaction) {
         currentPage = Math.min(totalPages - 1, currentPage + 1);
       }
 
-      console.log(`Updating leaderboard to page ${currentPage}`);
       await i.editReply(await createMessage(currentPage));
     });
 
     collector.on("end", () => {
-      console.log("Leaderboard collector ended");
       const disabledRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("previous")
@@ -232,22 +179,14 @@ async function handleLeaderboard(interaction) {
           .setDisabled(true)
       );
 
-      interaction.editReply({ components: [disabledRow] }).catch(() => {
-        console.log(
-          "Failed to edit reply after collector end. Message may have been deleted."
-        );
-      });
+      interaction.editReply({ components: [disabledRow] }).catch(console.error);
     });
-
-    console.log("Leaderboard command completed successfully");
   } catch (error) {
     console.error("Error in leaderboard command:", error);
-    await interaction
-      .editReply({
-        content: "An error occurred while fetching the leaderboard.",
-        components: [],
-      })
-      .catch(console.error);
+    await interaction.editReply({
+      content: "An error occurred while fetching the leaderboard.",
+      components: [],
+    });
   }
 }
 async function handleMatches(interaction) {
@@ -399,21 +338,21 @@ async function handleMatches(interaction) {
   }
 }
 async function handleMarkPaid(interaction) {
-  console.log("Starting markpaid command");
   try {
     const playerId = parseInt(interaction.options.getString("player"));
     const matchId = parseInt(interaction.options.getString("match"));
 
-    // Fetch player and match details
     const player = await prisma.player.findUnique({ where: { id: playerId } });
     const match = await prisma.match.findUnique({ where: { id: matchId } });
 
     if (!player || !match) {
-      await interaction.reply("Invalid player or match selected.");
+      await interaction.reply({
+        content: "Invalid player or match selected.",
+        ephemeral: true,
+      });
       return;
     }
 
-    // Check if the player-match combination exists
     const playerMatch = await prisma.playerMatch.findFirst({
       where: {
         playerId: playerId,
@@ -422,15 +361,15 @@ async function handleMarkPaid(interaction) {
     });
 
     if (!playerMatch) {
-      await interaction.reply(
-        `No record found for ${player.name} in the match on ${
-          match.date.toISOString().split("T")[0]
-        } at ${match.location}.`
-      );
+      await interaction.reply({
+        content: `No record found for ${
+          player.name
+        } in the match on ${formatDate(match.date)} at ${match.location}.`,
+        ephemeral: true,
+      });
       return;
     }
 
-    // Update the paid status
     await prisma.playerMatch.update({
       where: {
         id: playerMatch.id,
@@ -440,16 +379,26 @@ async function handleMarkPaid(interaction) {
       },
     });
 
-    await interaction.reply(
-      `Successfully marked ${player.name} as paid for the match on ${
-        match.date.toISOString().split("T")[0]
-      } at ${match.time} - ${match.location}.`
-    );
+    const embed = new EmbedBuilder()
+      .setColor("#00FF00")
+      .setTitle("Payment Marked")
+      .setDescription(
+        `Successfully marked ${player.name} as paid for the match.`
+      )
+      .addFields(
+        { name: "Date", value: formatDate(match.date), inline: true },
+        { name: "Time", value: match.time, inline: true },
+        { name: "Location", value: match.location, inline: true }
+      )
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed] });
   } catch (error) {
     console.error("Error in markpaid command:", error);
-    await interaction.reply(
-      "An error occurred while marking the player as paid."
-    );
+    await interaction.reply({
+      content: "An error occurred while marking the player as paid.",
+      ephemeral: true,
+    });
   }
 }
 async function handlePlayerDebt(interaction) {
@@ -710,55 +659,88 @@ async function handleJogo(interaction) {
     );
   }
 }
-async function handleJogoAutocomplete(interaction) {
-  const focusedValue = interaction.options.getFocused();
+async function handleMarkPaidAutocomplete(interaction) {
+  const focusedOption = interaction.options.getFocused(true);
+  let choices = [];
 
-  try {
-    const matches = await prisma.match.findMany({
-      where: {
-        OR: [
-          {
-            date: {
-              contains: focusedValue,
-            },
-          },
-          {
-            location: {
-              contains: focusedValue,
-              mode: "insensitive",
-            },
-          },
-        ],
-      },
-      orderBy: {
-        date: "desc",
-      },
-      take: 25,
-    });
+  if (focusedOption.name === "player") {
+    choices = await getPlayerChoices(focusedOption.value);
+  } else if (focusedOption.name === "match") {
+    choices = await getMatchChoices(focusedOption.value);
+  }
 
-    console.log("Matches found:", matches.length);
+  await interaction.respond(choices);
+}
 
-    const choices = matches.map((match) => ({
-      name: `${formatDate(match.date)} - ${match.time} - ${match.location}`,
-      value: match.id.toString(),
-    }));
-
-    console.log("Sending choices:", choices);
+async function handlePlayerDebtAutocomplete(interaction) {
+  const focusedOption = interaction.options.getFocused(true);
+  if (focusedOption.name === "player") {
+    const choices = await getPlayerChoices(focusedOption.value);
     await interaction.respond(choices);
-  } catch (error) {
-    console.error("Error in jogo autocomplete:", error);
-    await interaction.respond([]);
   }
 }
 
-function formatDate(date) {
-  return date
-    .toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    })
-    .replace(/\//g, "-");
+async function handleJogoAutocomplete(interaction) {
+  const focusedValue = interaction.options.getFocused();
+  const choices = await getMatchChoices(focusedValue);
+  await interaction.respond(choices);
+}
+
+async function getPlayerChoices(searchTerm) {
+  const players = await prisma.player.findMany({
+    take: 25,
+    where: {
+      name: {
+        contains: searchTerm,
+        mode: "insensitive",
+      },
+    },
+    orderBy: {
+      name: "asc",
+    },
+  });
+  return players.map((player) => ({
+    name: player.name,
+    value: player.id.toString(),
+  }));
+}
+
+async function getMatchChoices(searchTerm) {
+  const dateFilter = getDateFilter(searchTerm);
+  const matches = await prisma.match.findMany({
+    take: 25,
+    where: {
+      OR: [
+        { date: dateFilter },
+        {
+          location: {
+            contains: searchTerm,
+            mode: "insensitive",
+          },
+        },
+      ],
+    },
+    orderBy: {
+      date: "desc",
+    },
+  });
+  return matches.map((match) => ({
+    name: `${formatDate(match.date)} - ${match.time} - ${match.location}`,
+    value: match.id.toString(),
+  }));
+}
+
+function getDateFilter(searchTerm) {
+  const searchDate = new Date(searchTerm);
+  if (!isNaN(searchDate.getTime())) {
+    const nextDay = new Date(searchDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+    return {
+      gte: searchDate,
+      lt: nextDay,
+    };
+  }
+  return {};
 }
 
 function formatDate(date) {
@@ -770,6 +752,7 @@ function formatDate(date) {
     })
     .replace(/\//g, "-");
 }
+
 async function registerCommands() {
   console.log("Registering slash commands");
   const commands = [
@@ -787,14 +770,14 @@ async function registerCommands() {
       options: [
         {
           name: "player",
-          type: 3, // STRING type
+          type: 3,
           description: "Select the player",
           required: true,
           autocomplete: true,
         },
         {
           name: "match",
-          type: 3, // STRING type
+          type: 3,
           description: "Select the match",
           required: true,
           autocomplete: true,
@@ -807,7 +790,7 @@ async function registerCommands() {
       options: [
         {
           name: "player",
-          type: 3, // STRING type
+          type: 3,
           description: "Select the player",
           required: true,
           autocomplete: true,
@@ -824,7 +807,7 @@ async function registerCommands() {
       options: [
         {
           name: "jogo",
-          type: 3, // STRING type
+          type: 3,
           description: "Selecione o jogo",
           required: true,
           autocomplete: true,
@@ -842,11 +825,4 @@ async function registerCommands() {
   }
 }
 
-// Make sure to call registerCommands() when your bot starts up
-client.once("ready", () => {
-  console.log(`Bot is ready! Logged in as ${client.user.tag}`);
-  registerCommands();
-});
-
-// Don't forget to login your bot
 client.login(process.env.DISCORD_TOKEN);
